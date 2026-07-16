@@ -1,0 +1,14 @@
+# This file is template of the `.clangd` file.
+# Please copy this file to `.clangd` and modified for your environment.
+CompileFlags:
+  Add: [
+    "-target",   "arm-none-eabi",
+    "--sysroot", "/usr/lib/arm-none-eabi",
+    "-isystem",  "/usr/lib/arm-none-eabi/include",
+    "-isystem",  "/usr/include/newlib",
+    "-isystem",  "/usr/include/newlib/c++/12.2.1",
+    "-isystem",  "/usr/include/newlib/c++/12.2.1/arm-none-eabi",
+    "-isystem",  "/usr/include/newlib/c++/12.2.1/backward",
+    "-isystem",  "/usr/lib/gcc/arm-none-eabi/12.2.1/include",
+    "-isystem",  "/usr/lib/gcc/arm-none-eabi/12.2.1/include-fixed"
+  ]
