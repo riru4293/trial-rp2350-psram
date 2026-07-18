@@ -1,6 +1,7 @@
 #include <pico/stdlib.h>
 #include <hardware/psram.h>
 #include <pico/cyw43_arch.h>
+#include <tusb.h>
 
 #include <cstdio>
 #include <cstdint>
@@ -15,48 +16,65 @@ int main( void )
 
     if (cyw43_arch_init())
     {
-        printf("Wi-Fi init failed");
+        printf("Wi-Fi init failed.");
         return -1;
     }
 
+    /* Wait until the USB UART is connected. */
     cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, LED_ON);
+    while (!tud_cdc_connected())
+    {
+        tight_loop_contents();
+    }
+    cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, LED_OFF);
 
-    sleep_ms(2000); // Wait until the USB UART is initialized.
-
-    printf("PSRAM available %d.\n", psram_is_available());
+    if (!psram_is_available())
+    {
+        printf("PSRAM is not available." );
+        return -2;
+    }
 
     size_t const sizeof_psram = psram_get_size();
-    printf("PSRAM size %zu.\n", sizeof_psram);
-
     uint32_t constexpr NO_CACHE_MASK = ~0x4000000;
     uintptr_t constexpr CACHED_BASE_ADDR = 0x11000000;
     uintptr_t constexpr NO_CACHED_BASE_ADDR = CACHED_BASE_ADDR & NO_CACHE_MASK;
-
     uintptr_t constexpr BASE_ADDR = NO_CACHED_BASE_ADDR;
     uintptr_t const END_EXCLUSIVE_ADDR = BASE_ADDR + sizeof_psram;
 
+    printf("PSRAM addr 0x%X size %zu bytes.\n", BASE_ADDR, sizeof_psram);
+
+    /* Clear PSRAM all range */
     cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, LED_OFF);
     printf("Clear PSRAM\n");
     memset((uint32_t *)BASE_ADDR, 0xA5, sizeof_psram);
     uint32_t a = 0U;
-    for(a = BASE_ADDR; a < END_EXCLUSIVE_ADDR; a++)
+    for (a = BASE_ADDR; a < END_EXCLUSIVE_ADDR; a++)
     {
-        if(*(uint32_t *)a != 0xA5A5A5A5U) break;
+        if (*(uint32_t *)a != 0xA5A5A5A5U)
+        {
+            break;
+        }
         tight_loop_contents();
     }
-    if(a == END_EXCLUSIVE_ADDR) { printf("Clear [OK]\n"); }
-    else                        { printf("Clear [NG]\n"); }
+    if (a == END_EXCLUSIVE_ADDR)
+    {
+        printf("Clear [OK]\n");
+    }
+    else
+    {
+        printf("Clear [NG]\n");
+    }
     cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, LED_ON);
 
     sleep_ms(2000); // Wait
 
     // Note: Infinity loop
-    for(uint8_t offset = 0U; offset <= UINT8_MAX; offset++)
+    for (uint8_t offset = 0U; offset <= UINT8_MAX; offset++)
     {
         cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, LED_OFF);
         printf("Test %u: ", offset + 1U);
         uint32_t end_exclusive = sizeof_psram / sizeof(uint64_t);
-        for(uint32_t i = 0U; i < end_exclusive; i++)
+        for (uint32_t i = 0U; i < end_exclusive; i++)
         {
             uint64_t n = (i + offset) % UINT8_MAX;
             uint64_t v = (n << 56U) + (n << 48U) + (n << 40U) + (n << 32U)
@@ -66,7 +84,7 @@ int main( void )
         }
         cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, LED_ON);
         bool isOk = true;
-        for(uint32_t i = 0U; i < end_exclusive; i++)
+        for (uint32_t i = 0U; i < end_exclusive; i++)
         {
             uint64_t n = (i + offset) % UINT8_MAX;
             uint64_t v = (n << 56U) + (n << 48U) + (n << 40U) + (n << 32U)
@@ -74,7 +92,15 @@ int main( void )
             isOk = isOk && (((uint64_t *)BASE_ADDR)[i] == v);
             tight_loop_contents();
         }
-        if(isOk) { printf("[OK]\n"); } else { printf("[NG]\n"); break; }
+        if (isOk)
+        {
+            printf("[OK]\n");
+        }
+        else
+        {
+            printf("[NG]\n");
+            return -3;
+        }
     }
     cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, LED_OFF);
 

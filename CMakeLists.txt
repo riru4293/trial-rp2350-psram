@@ -6,17 +6,21 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 set(LIB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/lib)
 set(PICO_SDK_PATH ${LIB_DIR}/pico-sdk)
-set(PICO_BOARD pimoroni_pico_plus2_w_rp2350 CACHE STRING "Target board definition")
-set(FREERTOS_KERNEL_PATH ${LIB_DIR}/FreeRTOS-Kernel CACHE STRING "FreeRTOS kernel")
+set(PICO_BOARD pimoroni_pico_plus2_w_rp2350 CACHE STRING
+    "Target board definition")
+set(FREERTOS_KERNEL_PATH ${LIB_DIR}/FreeRTOS-Kernel CACHE STRING
+    "FreeRTOS kernel")
 set(FREERTOS_PORT_DIR ${LIB_DIR}/FreeRTOS-Port)
 
 include(${FREERTOS_PORT_DIR}/pico_sdk_import.cmake)
 include(${FREERTOS_PORT_DIR}/FreeRTOS_Kernel_import.cmake)
 
 add_library(freertos_config INTERFACE)
-target_include_directories(freertos_config INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_include_directories(freertos_config
+    INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}")
 
-project(TrialPsram VERSION 1.0.0 LANGUAGES C CXX ASM DESCRIPTION "Trial using PSRAM")
+project(TrialPsram VERSION 1.0.0 LANGUAGES C CXX ASM
+    DESCRIPTION "Trial using PSRAM")
 
 pico_sdk_init()
 
@@ -40,7 +44,7 @@ target_link_libraries(trial-psram
 pico_enable_stdio_uart(trial-psram TRUE)
 pico_enable_stdio_usb(trial-psram TRUE)
 
-pico_add_extra_outputs( trial-psram )
+pico_add_extra_outputs(trial-psram)
 
 ### ---------- ---------- ---------- ----------
 ### Compile options
