@@ -1,4 +1,6 @@
 build
 .cache
 .clangd
-
+.stfolder
+.zed
+.vscode
