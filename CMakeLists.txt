@@ -26,6 +26,10 @@ pico_sdk_init()
 
 add_executable(trial-psram
     ${CMAKE_CURRENT_SOURCE_DIR}/main.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/pal_critical_section.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/pal_panic.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/pal_psram_arena.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/pal_heap.cpp
 )
 
 target_include_directories(trial-psram
@@ -60,4 +64,3 @@ add_compile_options(
 if (CMAKE_C_COMPILER_ID STREQUAL "GNU")
     add_compile_options(-Wno-maybe-uninitialized)
 endif()
-
