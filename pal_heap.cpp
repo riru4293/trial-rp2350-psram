@@ -30,32 +30,37 @@ namespace
     //  Constants
     // ====================================================
 
-    Addr constexpr kMaxAddr         /* Maximum memory address */
+    Addr constexpr kMaxAddr /* Maximum memory address */
         = std::numeric_limits<Addr>::max();
+    Size constexpr kMinSize = 0x00000001u;   /* Min block size */
+    Size constexpr kMaxSize = 0x00FFFFFFu;   /* Max block size */
+    Size constexpr kMetaSize = sizeof(Meta); /* Metadata size  */
+    Size constexpr kBlockAlign = 8u; /* Align of a new block */
+    Size constexpr kNewBlockRequired /* Required size for a new block */
+        = kMetaSize + kMinSize;
 
-    Size constexpr kMinPayloadSize  /* Minimum size of the block payload */
-        = 0x00000001u;
+    /* Bit mask for block size */
+    struct BSM
+    {
+        static Size constexpr kIsAlloc = 0x80000000u; /* block is allocated  */
+        static Size constexpr kAlign   = 0x0F000000u; /* block payload align */
+        static Size constexpr kSize    = 0x00FFFFFFu; /* block payload size  */
 
-    Size constexpr kMaxPayloadSize  /* Maximum size of the block payload */
-        = 0x00FFFFFFu;
+        static constexpr Size toShift(Size mask)
+        {
+            if (mask == 0u) return 0u;
 
-    Size constexpr kMetaSize        /* Size of the block metadata */
-        = sizeof(Meta);
+            Size shift = 0u;
 
-    Size constexpr kMinBlockSize    /* Minimum block size */
-        = kMetaSize + kMinPayloadSize;
+            while ((mask & 1u) == 0u)
+            {
+                mask >>= 1u;
+                shift++;
+            }
 
-    Size constexpr kBlockAlign      /* Alignment size of the block payload */
-        = 8u;
-
-    Size constexpr kBlockAlignMask  /* Mask of the block payload alignment */
-        = kBlockAlign - 1u;
-
-    Size constexpr kAllocatedMask   /* Bit mask of allocated block flag */
-        = 0x80000000u;
-
-    Size constexpr kPayloadSizeMask /* Bit mask of block payload size */
-        = 0x00FFFFFFu;
+            return shift;
+        }
+    };
 
     // ====================================================
     //  Private functions
@@ -64,7 +69,7 @@ namespace
     /* Return true if the block is free, otherwise means allocated. */
     bool constexpr isFreeBlock(Meta const &m) noexcept
     {
-        return ((m.size & kAllocatedMask) != kAllocatedMask);
+        return ((m.size & BSM::kIsAlloc) != BSM::kIsAlloc);
     }
 
     /* Calculate margin to align the payload. */
@@ -82,7 +87,7 @@ namespace
         /* Smallest forward shift that aligns the payload, */
         /* ensuring room for a lead block.                 */
         Size const margin = (align * 2 - payload_offset) & align_mask;
-        return (margin < kMinBlockSize) ? margin + align : margin;
+        return (margin < kNewBlockRequired) ? margin + align : margin;
     }
 
     /* Calculate padding to align an address. */
@@ -111,15 +116,15 @@ namespace
         }
 
         Meta &m = *p;
-        Size const size = m.size & kPayloadSizeMask;
+        Size const size = m.size & BSM::kSize;
 
-        if (size < kMinPayloadSize)
+        if (size < kMinSize)
         {
             pal::panic("Heap::requireValid: too small size");
             __builtin_unreachable();
         }
 
-        if (size > kMaxPayloadSize)
+        if (size > kMaxSize)
         {
             pal::panic("Heap::requireValid: too large size");
             __builtin_unreachable();
@@ -149,13 +154,9 @@ pal::Heap::Heap(pal::PsramRegion const region) noexcept
     {
         bool overflow = /* BOA */(r.base > kMaxAddr - pad) ||
                         /* EOA */(r.size > kMaxAddr - pad - r.base);
-        bool too_small = (r.size < (pad + kMinBlockSize));
+        bool too_small = (r.size < (pad + kNewBlockRequired));
 
-        if (overflow || too_small)
-        {
-            // ToDo: Logging failed initialize
-            return;
-        }
+        if (overflow || too_small) return;
     }
 
     Size const free_bytes = r.size - pad - kMetaSize;
@@ -176,7 +177,7 @@ void *pal::Heap::allocate(std::size_t size, std::size_t align) noexcept
         pal::panic("Heap::allocate: illegal alignment specified");
         __builtin_unreachable();
     }
-    if (Size max = kMaxPayloadSize & ~(align - 1u); !size || (size > max))
+    if (Size max = kMaxSize & ~(align - 1u); !size || (size > max))
     {
         pal::panic("Heap::allocate: illegal size specified");
         __builtin_unreachable();
@@ -217,7 +218,7 @@ void *pal::Heap::allocate(std::size_t size, std::size_t align) noexcept
             calcAlignPadding(addr + trail_offset, kBlockAlign);
 
         if ((trail_gap <= kMaxAddr - addr - trail_offset) &&
-            (src.size >= trail_offset + trail_gap + kMinBlockSize))
+            (src.size >= trail_offset + trail_gap + kNewBlockRequired))
         {
             Size const trail_size = src.size - trail_offset - trail_gap;
             trail = reinterpret_cast<Meta *>(addr + trail_offset + trail_gap);
@@ -228,11 +229,13 @@ void *pal::Heap::allocate(std::size_t size, std::size_t align) noexcept
 
         /* Allocate */
         {
+            Size const alloc_align =
+                ((align - 1u) << BSM::toShift(BSM::kAlign)) & BSM::kAlign;
             Size const alloc_size = request_size + slack;
             consumed += alloc_size;
             alloc = reinterpret_cast<Meta *>(addr + head_gap);
             *alloc = {.next = trail ? trail : src.next,
-                      .size = kAllocatedMask | alloc_size};
+                      .size = BSM::kIsAlloc | alloc_align | alloc_size};
         }
 
         /* Add a leading free block */
@@ -315,7 +318,7 @@ void pal::Heap::deallocate(void const *p) noexcept
             __builtin_unreachable();
         }
 
-        Size released = src.size & kPayloadSizeMask;
+        Size released = src.size & BSM::kSize;
         Meta *merged_next = src.next;
         Size merged_size = released;
         Addr merged_addr = reinterpret_cast<Addr>(cur);
@@ -394,25 +397,29 @@ void pal::Heap::dumpMemoryMap(void) const noexcept
 
     Meta *cur = reinterpret_cast<Meta *>(root_.get())->next;
 
-    printf("| Stat | Head addr  | Begin addr | End addr   | Size     |\n");
-    printf("| :--- | :--------- | :--------- | :--------- | -------: |\n");
+    printf("| Stat | Head addr  | Begin addr | End addr   "
+           "| Size     | Align |\n");
+    printf("| :--- | :--------- | :--------- | :--------- "
+           "| -------: | ----: |\n");
     while (cur)
     {
         Meta const src = *cur;
         Addr const addr = reinterpret_cast<Addr>(cur);
         Addr const begin = addr + kMetaSize;
-        Size const size = src.size & kPayloadSizeMask;
+        Size const size = src.size & BSM::kSize;
         Addr const end = begin + size - 1u;
 
         if (isFreeBlock(src))
         {
-            printf("| Free | 0x%08X | 0x%08X | 0x%08X | %8zu |\n",
-                    addr, begin, end, size);
+            printf("|      | 0x%08X | 0x%08X | 0x%08X "
+                   "| %8zu |       |\n", addr, begin, end, size);
         }
         else
         {
-            printf("| Used | 0x%08X | 0x%08X | 0x%08X | %8zu |\n",
-                    addr, begin, end, size);
+            Size const align =
+                ((src.size & BSM::kAlign) >> BSM::toShift(BSM::kAlign)) + 1u;
+            printf("| Used | 0x%08X | 0x%08X | 0x%08X "
+                   "| %8zu |     %zu |\n", addr, begin, end, size, align);
         }
         cur = src.next;
     }
