@@ -30,6 +30,7 @@ add_executable(trial-psram
     ${CMAKE_CURRENT_SOURCE_DIR}/pal_panic.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/pal_psram_arena.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/pal_heap.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/mw_heap_repo.cpp
 )
 
 target_include_directories(trial-psram
