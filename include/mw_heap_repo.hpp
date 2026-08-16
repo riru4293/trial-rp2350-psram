@@ -1,3 +1,5 @@
+#pragma once
+
 #include <pal_heap.hpp>
 
 /* C++ standard library */
