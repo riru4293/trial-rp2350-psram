@@ -8,7 +8,7 @@
 /* C++ standard library */
 #include <cstdio>
 
-[[noreturn]] void pal::panic(char const *msg)
+[[noreturn]] void __not_in_flash_func(pal::panic)(char const *msg)
 {
     printf("PANIC\n%s\n", msg);
 
