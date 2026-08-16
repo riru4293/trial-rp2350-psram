@@ -4,93 +4,21 @@
 #include <pico/cyw43_arch.h>
 #include <tusb.h>
 
-#include <array>
 #include <vector>
 
-#include <cstddef>
 #include <cstdio>
-#include <cstdint>
 #include <cstring>
 
-
+#include <pal_heap.hpp>
+#include <mw_heap_repo.hpp>
+#include <mw_stl_allocator.hpp>
 
 static bool constexpr LED_OFF = false;
 static bool constexpr LED_ON = true;
 
 /* 試作 */
-
-enum class HeapId : uint8_t
-{
-    Default, // デフォルトヒープ
-    Count    // 要素数カウント用
-};
-
-#include <pal_heap.hpp>
-
 using namespace pal;
 
-class HeapRepository
-{
-public:
-    static void do_register(HeapId id, Heap *heap)
-    {
-        uint8_t idx = static_cast<uint8_t>(id);
-        if (idx < static_cast<uint8_t>(HeapId::Count))
-        {
-            heaps_[idx] = heap;
-        }
-        else
-        {
-            // エラー処理: ToDo: panic
-        }
-    }
-
-    static Heap &get(HeapId id = HeapId::Default)
-    {
-        uint8_t idx = static_cast<uint8_t>(id);
-        if ((idx < static_cast<uint8_t>(HeapId::Count)) && heaps_[idx])
-        {
-            return *heaps_[idx];
-        }
-        else
-        {
-            // エラー処理: ToDo: panic 暫定でデフォルトヒープを返す
-            return *heaps_[static_cast<uint8_t>(HeapId::Default)];
-        }
-    }
-
-private:
-    // 動的割当（std::map等）を使わず、固定長配列で管理するのが組み込みでは安全
-    static inline std::array<Heap *, static_cast<uint8_t>(HeapId::Count)> heaps_{};
-};
-
-template <typename T>
-class PsramAllocator
-{
-public:
-    using value_type = T;
-
-    explicit PsramAllocator(HeapId id = HeapId::Default) noexcept
-        : heap_id_(id) {}
-
-    template<class U>
-    explicit PsramAllocator(PsramAllocator<U> const &other) noexcept
-        : heap_id_(other.heap_id_) {}
-
-    [[nodiscard]] T *allocate(size_t n) noexcept
-    {
-        return static_cast<T *>(HeapRepository::get(heap_id_)
-                .allocate(n * sizeof(T), alignof(T)));
-    }
-
-    void deallocate(T *p, size_t) noexcept
-    {
-        HeapRepository::get(heap_id_).deallocate(p);
-    }
-
-private:
-    HeapId const heap_id_;
-};
 /* 試作 */
 
 int main( void )
@@ -120,70 +48,83 @@ int main( void )
     }
 
     // 1. PSRAM領域を確保
-    //pal::PsramRegion const region = pal::allocatePsramRegion(4U * 1024U * 1024U);
-    pal::PsramRegion const dust = pal::allocatePsramRegion(1U);
-    pal::PsramRegion const region = pal::allocatePsramRegion(100U);
+    pal::PsramRegion const region = pal::allocatePsramRegion(4U * 1024U * 1024U, false);
+    pal::PsramRegion const region2 = pal::allocatePsramRegion(4U * 1024U * 1024U, true);
 
     // 2. ヒープを作成
-    static Heap default_heap(region);
+    static Heap c0_psram_heap(region);
+    static Heap c0_cached_psram_heap(region2);
 
     // 3. リポジトリへ登録
-    HeapRepository::do_register(HeapId::Default, &default_heap);
+    mw::HeapRepository::put(mw::HeapId::Core0Psram, &c0_psram_heap);
+    mw::HeapRepository::put(mw::HeapId::Core0PsramCached, &c0_cached_psram_heap);
 
     // 利用例
     printf("Start proc");
-    /*
-    std::vector<int, PsramAllocator<int>> vec;
+
+    mw::StlAllocator<int> allocator(mw::HeapId::Core0Psram);
+    mw::StlAllocator<int> allocator2(mw::HeapId::Core0PsramCached);
+    std::vector<int, decltype(allocator)> vec(allocator);
+    std::vector<int, decltype(allocator)> vec2(allocator2);
+    uint32_t st1 = time_us_32();
     vec.clear();
-    //vec.reserve(100);
     for(int i = 0; i < 999; i++)
     {
         vec.push_back(i);
     }
-
-    vec.push_back(42);
-    vec.push_back(100);
-    vec.push_back(200);
-    vec.push_back(300);
-    printf("Inter proc");
-    */
-    sleep_ms(2000);
-    printf("region: base=0x%08X, size=%zu\n", region.base, region.size);
-    /*
-    for (auto const &val : vec)
+    for(int i = 0; i < 999; i++)
+    {
+    for (auto &val : vec)
     {
         // ここで val を使用する
-        printf("Value: %d\n", val);
+        val++;
     }
-    */
-    default_heap.dumpMemoryMap();
+    }
+    uint32_t ed1 = time_us_32();
+    uint32_t st2 = time_us_32();
+    vec2.clear();
+    for(int i = 0; i < 999; i++)
+    {
+        vec2.push_back(i);
+    }
+    for(int i = 0; i < 999; i++)
+    {
+    for (auto &val : vec2)
+    {
+        // ここで val を使用する
+        val++;
+    }
+    }
+    uint32_t ed2 = time_us_32();
+    printf("Inter proc");
+
+    sleep_ms(2000);
+    printf("region: base=0x%08X, size=%zu\n", region.base, region.size);
+
+    c0_psram_heap.dumpMemoryMap();
 
     printf("\nStep 1\n");
-    void *a = default_heap.allocate(39, 4);
+    void *a = c0_psram_heap.allocate(39, 4);
     if (!a) printf("Failed allocation\n");
-    default_heap.dumpMemoryMap();
+    c0_psram_heap.dumpMemoryMap();
 
     printf("\nStep 2\n");
-    void *b = default_heap.allocate(30, 8);
+    void *b = c0_psram_heap.allocate(30, 8);
     if (!b) printf("Failed allocation\n");
-    default_heap.dumpMemoryMap();
-/*
+    c0_psram_heap.dumpMemoryMap();
+
     printf("\nStep 3\n");
-    void *c = default_heap.allocate(400, 4);
-    default_heap.dumpMemoryMap();
+    void *c = c0_psram_heap.allocate(400, 4);
+    c0_psram_heap.dumpMemoryMap();
+    c0_psram_heap.dumpMemoryMap();
 
     printf("\nStep 4\n");
-    default_heap.deallocate(c);
-    default_heap.dumpMemoryMap();
+    c0_psram_heap.deallocate(b);
+    c0_psram_heap.dumpMemoryMap();
 
-    printf("\nStep 5\n");
-    default_heap.deallocate(a);
-    default_heap.dumpMemoryMap();
+    printf("time1 = %u us\n", ed1 - st1);
+    printf("time2 = %u us\n", ed2 - st2);
 
-    printf("\nStep 6\n");
-    default_heap.deallocate(b);
-    default_heap.dumpMemoryMap();
- */  
     while (1)
     {
         tight_loop_contents();

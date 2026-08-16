@@ -1,7 +1,10 @@
-#include <pal_psram_arena.hpp>
+#include "./include/pal_psram_arena.hpp"
 
 #include <pal_critical_section.hpp>
 #include <pal_panic.hpp>
+
+/* pico-sdk */
+#include <hardware/psram.h>
 
 /* C++ standard library */
 #include <cstddef>
@@ -9,35 +12,30 @@
 
 namespace
 {
-    /* Constants */
-    /* Note: About the begin address (0x15000000) is
-     *  0x14000000 .. XIP_NOCACHE_NOALLOC_BASE
-     *  +
-     *  0x01000000 .. flash_devinfo_size_to_bytes(FLASH_DEVINFO_SIZE_MAX)
-     *                  (flash memory area)
-     */
-    std::size_t constexpr kPsramBytes = 0x800000u; /**< 8 MiB */
-    std::uintptr_t constexpr kPsramBeginAddr = 0x15000000u;
-    std::uintptr_t constexpr kPsramEndAddr = kPsramBeginAddr + kPsramBytes;
-
-    /* Variables */
-    std::uintptr_t next_alloc_addr = kPsramBeginAddr;
+    std::uintptr_t constexpr kCachedBase   = 0x11000000u;
+    std::uintptr_t constexpr kUncachedBase = 0x15000000u;
 }
 
-pal::PsramRegion pal::allocatePsramRegion(std::size_t size) noexcept
+pal::PsramRegion pal::allocatePsramRegion(
+        std::size_t size, bool cached) noexcept
 {
     pal::enterCriticalSection();
 
+    static std::size_t const total = []() {return psram_get_size();}();
+    static std::size_t remain = total;
+
     /* Panic if illegal argument */
-    std::size_t const remain = kPsramEndAddr - next_alloc_addr;
+    //std::size_t const remain = kPsramEndAddr - next_alloc_addr;
     if ((size == 0u) || (size > remain))
     {
-        pal::panic("palPsramArenaAllocate: Illegal argument");
-        return pal::PsramRegion(0u, 0u); /* No reached */
+        pal::panic("pal::allocatePsramRegion: Illegal argument");
+        __builtin_unreachable();
     }
 
-    std::uintptr_t const addr = next_alloc_addr;
-    next_alloc_addr += size;
+    std::size_t const offset = total - remain;
+    std::uintptr_t const addr =
+        (cached ? kCachedBase : kUncachedBase) + offset;
+    remain -= size;
 
     pal::leaveCriticalSection();
 
