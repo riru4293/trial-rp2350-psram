@@ -1,13 +1,20 @@
 cmake_minimum_required( VERSION 3.12 )
 
+# C/C++ standard to use
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
+
+# Make a compile_commands.json on cmake
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# Variables
 set(LIB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/lib)
 set(PICO_SDK_PATH ${LIB_DIR}/pico-sdk)
+
+#set(PICO_BOARD pico CACHE STRING
 set(PICO_BOARD pimoroni_pico_plus2_w_rp2350 CACHE STRING
     "Target board definition")
+
 set(FREERTOS_KERNEL_PATH ${LIB_DIR}/FreeRTOS-Kernel CACHE STRING
     "FreeRTOS kernel")
 set(FREERTOS_PORT_DIR ${LIB_DIR}/FreeRTOS-Port)
@@ -24,7 +31,7 @@ project(TrialPsram VERSION 1.0.0 LANGUAGES C CXX ASM
 
 pico_sdk_init()
 
-add_executable(trial-psram
+add_executable(trial
     ${CMAKE_CURRENT_SOURCE_DIR}/main.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/pal_critical_section.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/pal_panic.cpp
@@ -33,23 +40,25 @@ add_executable(trial-psram
     ${CMAKE_CURRENT_SOURCE_DIR}/mw_heap_repo.cpp
 )
 
-target_include_directories(trial-psram
-    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include
+target_include_directories(trial
+PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
-target_link_libraries(trial-psram
-    PRIVATE pico_stdlib
-    PRIVATE pico_cyw43_arch_none
-    PRIVATE hardware_psram
-    PRIVATE freertos_config
-    PRIVATE pico_async_context_freertos
-    PRIVATE FreeRTOS-Kernel-Heap4
+target_link_libraries(trial
+PRIVATE
+    pico_stdlib
+    hardware_psram
+    pico_cyw43_arch_none
+    freertos_config
+    pico_async_context_freertos
+    FreeRTOS-Kernel-Heap4
 )
 
-pico_enable_stdio_uart(trial-psram TRUE)
-pico_enable_stdio_usb(trial-psram TRUE)
+pico_enable_stdio_uart(trial TRUE)
+pico_enable_stdio_usb(trial FALSE)
 
-pico_add_extra_outputs(trial-psram)
+pico_add_extra_outputs(trial)
 
 ### ---------- ---------- ---------- ----------
 ### Compile options
