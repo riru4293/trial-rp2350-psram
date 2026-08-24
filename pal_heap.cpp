@@ -280,6 +280,9 @@ void *pal::Heap::allocate(std::size_t size, std::size_t align) noexcept
 
 void pal::Heap::deallocate(void const *p) noexcept
 {
+    /* Early return if null */
+    if (!p) return;
+
     Addr const payload_addr = reinterpret_cast<Addr>(p);
 
     /* Fail safe */
