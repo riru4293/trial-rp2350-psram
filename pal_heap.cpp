@@ -1,6 +1,6 @@
 #include "./include/pal_heap.hpp"
 #include <pal_critical_section.hpp>
-#include <pal_panic.hpp>
+#include <pal_reset.hpp>
 
 /* C++ standard library */
 #include <cstdint>

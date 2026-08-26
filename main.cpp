@@ -1,31 +1,35 @@
-#include <pal_psram_arena.hpp>
-#include <pico/stdlib.h>
-#include <hardware/psram.h>
-#include <pico/cyw43_arch.h>
-#include <tusb.h>
-
-#include <vector>
-
-#include <cstdio>
-#include <cstring>
-
-#include <pal_heap.hpp>
 #include <mw_heap_repo.hpp>
 #include <mw_stl_allocator.hpp>
+
+#include <pal_psram_arena.hpp>
+#include <pal_heap.hpp>
+#include <pal_reset.hpp>
+
+#include <FreeRTOS.h>
+#include <task.h>
+
+#include <pico/stdlib.h>
+#include <pico/multicore.h>
+#include <hardware/psram.h>
+#include <hardware/watchdog.h>
+#include <hardware/structs/powman.h>
+#include <pico/cyw43_arch.h>
+
+#include <vector>
+#include <cstdio>
+#include <cstring>
+#include <cinttypes>
+#include <iostream>
+
 
 static bool constexpr LED_OFF = false;
 static bool constexpr LED_ON = true;
 
-/* 試作 */
 using namespace pal;
-
-/* 試作 */
 
 int main( void )
 {
     stdio_init_all();
-
-    printf("Bootup");
 
     if (cyw43_arch_init())
     {
@@ -33,18 +37,26 @@ int main( void )
         return -1;
     }
 
-    /* Wait until the USB UART is connected. */
-    cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, LED_ON);
-    while (!tud_cdc_connected())
-    {
-        tight_loop_contents();
-    }
-    cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, LED_OFF);
+    multicore_lockout_victim_init();
 
-    if (!psram_is_available())
+    cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, LED_ON);
+
+    if (auto msg = pal::getDyingMessage())
     {
-        printf("PSRAM is not available." );
-        return -2;
+        std::cout << "\n--\n" << msg.value() << "\n--\n";
+    }
+    else
+    {
+        std::cout << "\n--\nNormal boot up\n--\n";
+    }
+
+    if (auto msg = pal::getDyingMessage())
+    {
+        std::cout << "\n--\n" << msg.value() << "\n--\n";
+    }
+    else
+    {
+        std::cout << "\n--\nNo dying message\n--\n";
     }
 
     // 1. PSRAM領域を確保
@@ -53,6 +65,7 @@ int main( void )
 
     // 2. ヒープを作成
     static Heap c0_psram_heap(region);
+
     static Heap c0_cached_psram_heap(region2);
 
     // 3. リポジトリへ登録
@@ -60,8 +73,6 @@ int main( void )
     mw::HeapRepository::put(mw::HeapId::Core0PsramCached, &c0_cached_psram_heap);
 
     // 利用例
-    printf("Start proc");
-
     mw::StlAllocator<int> allocator(mw::HeapId::Core0Psram);
     mw::StlAllocator<int> allocator2(mw::HeapId::Core0PsramCached);
     std::vector<int, decltype(allocator)> vec(allocator);
@@ -96,15 +107,16 @@ int main( void )
     }
     }
     uint32_t ed2 = time_us_32();
-    printf("Inter proc");
+/*
+    printf("time1 = %u us\n", ed1 - st1);
+    printf("time2 = %u us\n", ed2 - st2);
 
-    sleep_ms(2000);
     printf("region: base=0x%08X, size=%zu\n", region.base, region.size);
 
     c0_psram_heap.dumpMemoryMap();
-
+*/
     printf("\nStep 1\n");
-    void *a = c0_psram_heap.allocate(39, 4);
+    void *a = c0_psram_heap.allocate(39, 16);
     if (!a) printf("Failed allocation\n");
     c0_psram_heap.dumpMemoryMap();
 
@@ -115,15 +127,14 @@ int main( void )
 
     printf("\nStep 3\n");
     void *c = c0_psram_heap.allocate(400, 4);
-    c0_psram_heap.dumpMemoryMap();
+    if (!c) printf("Failed allocation\n");
     c0_psram_heap.dumpMemoryMap();
 
     printf("\nStep 4\n");
-    c0_psram_heap.deallocate(b);
+    if (b) c0_psram_heap.deallocate(b);
     c0_psram_heap.dumpMemoryMap();
 
-    printf("time1 = %u us\n", ed1 - st1);
-    printf("time2 = %u us\n", ed2 - st2);
+    printf("SRAM heap %zu KiB\n", xPortGetFreeHeapSize() / 1024u);
 
     while (1)
     {

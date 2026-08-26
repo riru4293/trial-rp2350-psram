@@ -1,7 +1,7 @@
 #include "./include/pal_psram_arena.hpp"
 
 #include <pal_critical_section.hpp>
-#include <pal_panic.hpp>
+#include <pal_reset.hpp>
 
 /* pico-sdk */
 #include <hardware/psram.h>

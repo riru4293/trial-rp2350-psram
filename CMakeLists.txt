@@ -34,7 +34,7 @@ pico_sdk_init()
 add_executable(trial
     ${CMAKE_CURRENT_SOURCE_DIR}/main.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/pal_critical_section.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/pal_panic.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/pal_reset.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/pal_psram_arena.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/pal_heap.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/mw_heap_repo.cpp

@@ -1,6 +1,6 @@
 #include "./include/mw_heap_repo.hpp"
 
-#include <pal_panic.hpp>
+#include <pal_reset.hpp>
 
 void mw::HeapRepository::put(mw::HeapId id, pal::Heap *heap)
 {
