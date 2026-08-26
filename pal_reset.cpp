@@ -1,7 +1,7 @@
 #include "./include/pal_reset.hpp"
 
 /* pico-sdk */
-#include <hardware/irq.h>
+#include <hardware/structs/psm.h>
 #include <hardware/sync.h>
 #include <hardware/uart.h>
 #include <hardware/watchdog.h>
@@ -14,7 +14,9 @@
 namespace
 {
     uint32_t constexpr kMagicNum = 3319512153u;
+
     std::atomic<bool>latch{false};
+
     uint32_t __uninitialized_ram(dying_code);
     char __uninitialized_ram(dying_msg)[100];
 
@@ -44,7 +46,6 @@ std::optional<std::string_view> pal::getDyingMessage(void)
 
     /* Won't let anyone get in my way */
     (void)save_and_disable_interrupts();
-    irq_set_mask_enabled(0xFFFFFFFFu/*mask*/, false/*enabled*/);
 
     /* Note:
      *  No intention of stopping the others.
@@ -52,11 +53,28 @@ std::optional<std::string_view> pal::getDyingMessage(void)
      */
 
     /* Reset count down has begun */
-    watchdog_enable(2000u/*ms*/, true/*pause on debug*/);
-    watchdog_update();
+    {
+        uint32_t constexpr kDelayUs = 2000u * 1000u;
+        uint32_t constexpr kDbgBits = WATCHDOG_CTRL_PAUSE_DBG0_BITS
+                                    | WATCHDOG_CTRL_PAUSE_DBG1_BITS
+                                    | WATCHDOG_CTRL_PAUSE_JTAG_BITS;
+        watchdog_hw->scratch[4] = 0x6ab73121u; /* WATCHDOG_NON_REBOOT_MAGIC */
+        hw_clear_bits(&watchdog_hw->ctrl, WATCHDOG_CTRL_ENABLE_BITS);
+        hw_set_bits(&psm_hw->wdsel,
+            PSM_WDSEL_BITS & ~(PSM_WDSEL_ROSC_BITS | PSM_WDSEL_XOSC_BITS));
+        hw_set_bits(&watchdog_hw->ctrl, kDbgBits);
+        watchdog_hw->load = kDelayUs;
+        hw_set_bits(&watchdog_hw->ctrl, WATCHDOG_CTRL_ENABLE_BITS);
+    }
 
     /* Leave a dying message */
-    dying_msg[msg.copy(dying_msg, sizeof(dying_msg) - 1u)] = '\0';
+    {
+        char const * const src = msg.data();
+        size_t const n = msg.size() < sizeof(dying_msg) - 1u
+                       ? msg.size() : sizeof(dying_msg) - 1u;
+        for (size_t i = 0u; i < n; ++i) dying_msg[i] = src[i];
+        dying_msg[n] = '\0';
+    }
     dying_code = kMagicNum;
 
     uint8_t sent = 0u;
