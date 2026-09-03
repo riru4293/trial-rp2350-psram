@@ -5,7 +5,6 @@
 /* C++ standard library */
 #include <cstdint>
 #include <cstdio>
-#include <cstring>
 #include <limits>
 
 namespace
@@ -115,6 +114,13 @@ namespace
             __builtin_unreachable();
         }
 
+        Addr const address = reinterpret_cast<Addr>(p);
+        if (address > kMaxAddr - kMetaSize)
+        {
+            pal::panic("Heap::requireValid: header overflow");
+            __builtin_unreachable();
+        }
+
         Meta &m = *p;
         Size const size = m.size & BSM::kSize;
 
@@ -124,15 +130,16 @@ namespace
             __builtin_unreachable();
         }
 
-        if (size > kMaxSize)
+        if (size > kMaxAddr - address - kMetaSize)
         {
-            pal::panic("Heap::requireValid: too large size");
+            pal::panic("Heap::requireValid: overflow");
             __builtin_unreachable();
         }
 
-        if (size > kMaxAddr - reinterpret_cast<Addr>(p))
+        Addr const block_end = address + kMetaSize + size;
+        if (m.next && (reinterpret_cast<Addr>(m.next) != block_end))
         {
-            pal::panic("Heap::requireValid: overflow");
+            pal::panic("Heap::requireValid: invalid next address");
             __builtin_unreachable();
         }
 
@@ -147,6 +154,12 @@ namespace
 pal::Heap::Heap(pal::PsramRegion const region) noexcept
     : root_(new Meta(), [](void *p) { delete static_cast<Meta *>(p); })
 {
+    if (!root_)
+    {
+        pal::panic("Heap::Heap: failed to allocate sentinel");
+        __builtin_unreachable();
+    }
+
     pal::PsramRegion const &r = region; // Alias
     Size const pad = calcAlignPadding(r.base, kBlockAlign);
 
@@ -160,7 +173,6 @@ pal::Heap::Heap(pal::PsramRegion const region) noexcept
     }
 
     Size const free_bytes = r.size - pad - kMetaSize;
-
     free_bytes_ = free_bytes;
     lowest_ever_free_bytes_ = free_bytes;
 
@@ -278,7 +290,7 @@ void *pal::Heap::allocate(std::size_t size, std::size_t align) noexcept
     return ret;
 }
 
-void pal::Heap::deallocate(void const *p) noexcept
+void pal::Heap::deallocate(void *p) noexcept
 {
     /* Early return if null */
     if (!p) return;
