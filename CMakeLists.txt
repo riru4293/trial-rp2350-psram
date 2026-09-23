@@ -33,6 +33,7 @@ pico_sdk_init()
 
 add_executable(trial
     ${CMAKE_CURRENT_SOURCE_DIR}/main.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/ssr_registry.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/pal_critical_section.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/pal_reset.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/pal_psram_arena.cpp

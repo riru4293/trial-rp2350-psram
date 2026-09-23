@@ -18,7 +18,7 @@
 #include <vector>
 #include <cstdio>
 #include <cstring>
-#include <cinttypes>
+// #include <cinttypes>
 #include <iostream>
 
 
@@ -39,24 +39,16 @@ int main( void )
 
     multicore_lockout_victim_init();
 
+    std::cout << "Booting...\n";
     cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, LED_ON);
 
-    if (auto msg = pal::getDyingMessage())
+    if (auto ctx = pal::getResetContext(); ctx.has_value())
     {
-        std::cout << "\n--\n" << msg.value() << "\n--\n";
+        std::cout << "\n-- Memories\n" << ctx.value().msg << "\n--\n";
     }
     else
     {
         std::cout << "\n--\nNormal boot up\n--\n";
-    }
-
-    if (auto msg = pal::getDyingMessage())
-    {
-        std::cout << "\n--\n" << msg.value() << "\n--\n";
-    }
-    else
-    {
-        std::cout << "\n--\nNo dying message\n--\n";
     }
 
     // 1. PSRAM領域を確保

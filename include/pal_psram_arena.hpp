@@ -5,14 +5,14 @@
  * @brief PSRAM region allocator.
  *
  * @details
- * Provides non-overlapping regions from the available PSRAM capacity. Each
- * allocation advances a shared cursor; allocated regions are never released
- * or reused. The available capacity is determined when the first allocation
- * is made.
+ * Owns the available PSRAM address space and lends non-overlapping,
+ * exactly-sized contiguous regions. Callers can select the cached or
+ * uncached XIP alias for each returned region.
  *
- * Each allocation selects either the cached or uncached XIP address alias for
- * its returned base address. A zero-sized request or a request exceeding the
- * remaining capacity is an unrecoverable error and requests a software reset.
+ * Allocations advance a shared cursor and are never released or reused.
+ * The available capacity is determined on the first allocation. A zero-sized
+ * request or a request exceeding the remaining capacity is unrecoverable and
+ * triggers a software reset.
  */
 
 /* C++ standard library */
@@ -22,7 +22,7 @@
 namespace pal
 {
     /**
-     * @brief A contiguous allocated PSRAM region.
+     * @brief  A contiguous PSRAM XIP address range.
      */
     struct PsramRegion
     {
@@ -40,7 +40,7 @@ namespace pal
     };
 
     /**
-     * @brief Allocate a contiguous PSRAM region.
+     * @brief  Allocate a contiguous PSRAM address range.
      *
      * @param size [in] Number of bytes to allocate.
      * @param cached [in] `true` to return the cached XIP alias; `false` for

@@ -33,20 +33,27 @@ namespace pal
      *
      * @details
      * @code
-     * root_ -> [Sentinel] -> [Meta] -> [Meta] -> nullptr
-     *                              |         |
-     *                              v         v
-     *                         [Payload] [Payload]
+     * Region and block image:
      *
-     * One block:
-     * +----------------+----------------------+
-     * | Meta (header)  | Payload              |
-     * +----------------+----------------------+
-     *                         ^
-     *                         +-- allocate() return pointer
+     *   root_ -> [Meta] -> [Meta] -> [Meta] -> nullptr
+     *              |        |        |
+     *              v        v        v
+     *          +--------+--------+--------+
+     *          | Block0 | Block1 | Block2 |
+     *          +--------+--------+--------+
+     *
+     *   One block layout:
+     *
+     *          +----------------+----------------------+
+     *          | Meta (header)  | Payload              |
+     *          +----------------+----------------------+
+     *                             ^
+     *                             +-- allocate() return pointer
      * @endcode
      *
-     * A split can produce leading, allocated, and trailing blocks.
+     * @ref allocate may split one free block into lead/alloc/trail blocks.
+     * @ref deallocate merges adjacent free blocks into one larger block.
+     *
      */
     class Heap
     {

@@ -1,5 +1,5 @@
 #include "./include/pal_reset.hpp"
-#include "pal_reset_struct.hpp"
+#include <ssr_registry.hpp>
 
 /* pico-sdk */
 #include <hardware/structs/psm.h>
@@ -57,6 +57,9 @@ std::optional<ResetContext> pal::getResetContext(void) noexcept
     if (reset_latch.exchange(true, std::memory_order_acq_rel))
         while (true) tight_loop_contents();
 
+    /* Set now panic to the system state registry */
+    ssr::setPanic();
+
     /* Won't let anyone get in my way */
     static_cast<void>(save_and_disable_interrupts());
 
@@ -67,7 +70,7 @@ std::optional<ResetContext> pal::getResetContext(void) noexcept
 
     /* Reset count down has begun */
     {
-        uint32_t constexpr kDelayUs = 2000u * 1000u;
+        uint32_t constexpr kDelayUs = 2000u * 1000u; // 2 seconds
         hw_clear_bits(&watchdog_hw->ctrl,
             WATCHDOG_CTRL_ENABLE_BITS |
             WATCHDOG_CTRL_PAUSE_DBG0_BITS |
